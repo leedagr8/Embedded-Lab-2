@@ -1,0 +1,303 @@
+//*****************************************************************************
+//File Name: blinky.c
+//Date: March 15, 2018
+//Programmer: Lionardo Abundes-Pacheco
+//Programmer: Leon Johnson
+//
+//for this lab a traveling train is simulated on a breadboard using LED's
+//  four blue lights are used and each one represents a station
+//  one green is used to indicate to the pedestrian when to walk
+//  one red is used to indicate to the pedestrian when not to walk
+//  seven resistor were used for the LED's and the switch
+//  (6) 120 ohm resistors were used for the LED's
+//  (1) 1000 ohm resistor was used for the switch
+//  the resistor were not really needed since the LED's are being powered by 3.3 V
+//*****************************************************************************
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "inc/hw_memmap.h"
+#include "driverlib/gpio.h"
+#include "driverlib/sysctl.h"
+#include "inc/tm4c123gh6pm.h"
+#include "inc/hw_types.h"
+#include "inc/hw_ints.h"
+#include "inc/hw_nvic.h"
+#include "driverlib/debug.h"
+#include "driverlib/fpu.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/pin_map.h"
+#include "driverlib/rom.h"
+#include "driverlib/systick.h"
+
+#define BLUE_1  GPIO_PIN_0  //UNCC MAIN
+#define BLUE_2  GPIO_PIN_1  //JW CLAY
+#define BLUE_3  GPIO_PIN_2  //MCCULLOUGH
+#define BLUE_4  GPIO_PIN_3  //UNIVERSITY
+#define GREEN   GPIO_PIN_4  //WALK
+#define RED     GPIO_PIN_5  //DON'T WALK
+#define t_sta       1       //time at station
+#define t_tra       2       //time traveling
+#define SW      GPIO_PIN_6  //switch
+
+void
+SysTick_s(uint32_t ui32Seconds)
+{
+    //Loop while there are more seconds to wait.
+    while(ui32Seconds--)
+    {
+        //Wait until the SysTick value is less than 1000.
+        while(ROM_SysTickValueGet() > 1000)
+        {
+        }
+        //Wait until the SysTick value is greater than 1000.
+        while(ROM_SysTickValueGet() < 1000)
+        {
+        }
+    }
+}
+
+void conductor(uint32_t station)
+{
+    GPIOPinWrite(GPIO_PORTB_BASE,BLUE_1|BLUE_2|BLUE_3|BLUE_4,station);    // holds the LED at current station
+}
+
+int
+main(void)
+{
+     uint32_t i = 1;
+     uint32_t pinVal = 0;
+     uint32_t stat = 0;
+
+     // Set the clocking to run directly from the crystal.
+     SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN |
+                            SYSCTL_XTAL_16MHZ);
+
+     // Set up and enable the SysTick timer.  It will be used as a reference
+     // for delay loops in the interrupt handlers.  The SysTick timer period
+     // will be set up for one second.
+     SysTickPeriodSet(SysCtlClockGet());
+     SysTickEnable();
+
+    // Enable the GPIO port that is used for the on-board LED.
+	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+
+    // Check if the peripheral access is enabled.
+	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB))
+	{
+	}
+
+    // Enable the GPIO pin for the LED's.  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+	GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, BLUE_1|BLUE_2|BLUE_3|BLUE_4);    //Blue LED's
+	GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GREEN|RED); //Green and Red LED's
+	GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, SW);//switch
+
+	GPIOPadConfigSet(GPIO_PORTB_BASE,SW,GPIO_STRENGTH_2MA,GPIO_PIN_TYPE_STD_WPD); //WPD
+
+
+    // Loop forever.
+    while(1)
+    {
+        //train must be able to go from uncc main to university blvd and back to uncc main repeated
+
+        //----------------Switch---------------------
+        //if switch is ON,
+        //the BLUE LED at the station stays ON
+        //until the the switch is OFF
+
+        pinVal = GPIOPinRead(GPIO_PORTB_BASE, SW);
+
+        //----------------LED's----------------------
+        //-------------------------------------------
+        switch(i)
+        {
+            case 1:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    //----------------uncc main-------------
+                    //BLUE_1 is ON and all other LED's are OFF
+                    //1 second at station
+                    stat = BLUE_1;
+                    GPIOPinWrite(GPIO_PORTB_BASE,(BLUE_1 | GREEN), (BLUE_1 | GREEN));
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                //BLUE_1 is turned OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_1, 0x0);
+                break;
+
+            case 2:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    stat = BLUE_2;
+                    //train is traveling to next stop
+                    //takes 2 seconds to next destination
+                    SysTick_s(t_tra);
+                    //GREEN is turned OFF since it has reached the station
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+                    //-----------------JW Clay-------------------
+                    //BLUE_2 is ON and all other LED's are OFF
+                    //1 second at station
+                    GPIOPinWrite(GPIO_PORTB_BASE,(BLUE_2 | GREEN), (BLUE_2 | GREEN));
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                //LED's turn OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_2, 0x0);
+                break;
+
+            case 3:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    stat = BLUE_3;
+                    //train is traveling to next stop
+                    //takes 2 seconds to next destination
+                    //from 0 to 1 second's
+                    //GREEN is ON and RED is OFF
+
+                    SysTick_s(t_tra / 2);
+                    //from 1 to 2 second's
+                    //GREEN is OFF and RED is ON
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+                    GPIOPinWrite(GPIO_PORTB_BASE, RED, RED);
+                    SysTick_s(t_tra / 2);
+                    //----------------McCullough------------------
+                    //BLUE_3 is ON and all other LED's are OFF
+                    //1 second at station
+                    GPIOPinWrite(GPIO_PORTB_BASE,BLUE_3, BLUE_3);
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                //LED's turn OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_3, 0x0);
+                break;
+
+            case 4:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    stat = BLUE_4;
+                    //train is traveling to next stop
+                    //takes 2 seconds to next destination
+                    SysTick_s(t_tra / 2);
+                    GPIOPinWrite(GPIO_PORTB_BASE, RED, 0x0);
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, GREEN);
+                    SysTick_s(t_tra / 2);
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+                    //----------------University-----------------
+                    //BLUE_4 and GREEN is ON and all other LED's are OFF
+                    //1 second at station
+                    GPIOPinWrite(GPIO_PORTB_BASE,(BLUE_4 | GREEN), (BLUE_4 | GREEN));
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                //LED's turn OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_4, 0x0);
+                break;
+
+            case 5:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    stat = BLUE_3;
+                    //train is traveling to next stop
+                    //takes 2 seconds to next destination
+                    //from 0 to 1 second's
+                    //GREEN is ON and RED is OFF
+
+                    SysTick_s(t_tra / 2);
+                    //from 1 to 2 second's
+                    //GREEN is OFF and RED is ON
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+                    GPIOPinWrite(GPIO_PORTB_BASE, RED, RED);
+                    SysTick_s(t_tra / 2);
+                    //-----------------McCulloug-------------------
+                    //BLUE_3 is ON and all other LED's are OFF
+                    //1 second at station
+                    GPIOPinWrite(GPIO_PORTB_BASE,BLUE_3, BLUE_3);
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                //LED's turn OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_3, 0x0);
+                break;
+
+            case 6:
+                //switch is OFF
+                if((pinVal & SW) == 0)
+                {
+                    stat = BLUE_2;
+                    //train is traveling to next stop
+                    //takes 2 seconds to next destination
+                    SysTick_s(t_tra / 2);
+                    GPIOPinWrite(GPIO_PORTB_BASE, RED, 0x0);
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, GREEN);
+                    SysTick_s(t_tra / 2);
+                    GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+                    //----------------JW Clay-------------
+                    //BLUE_2 is ON and all other LED's are OFF
+                    //1 second at station
+                    GPIOPinWrite(GPIO_PORTB_BASE,(BLUE_2 | GREEN), (BLUE_2 | GREEN));
+                    SysTick_s(t_sta);
+                    i++;
+                }
+                //switch is ON
+                if((pinVal & SW) != 0)
+                {
+                    conductor(stat);
+                    conductor(0);
+                }
+                break;
+
+        case 7:
+            //switch is OFF
+            if((pinVal & SW) == 0)
+            {
+                i=1;
+                //LED's turn OFF when leaving station
+                GPIOPinWrite(GPIO_PORTB_BASE, BLUE_2, 0x0);
+                //train is traveling to next stop
+                //takes 2 seconds to next destination
+                SysTick_s(t_tra);
+                GPIOPinWrite(GPIO_PORTB_BASE, GREEN, 0x0);
+            }
+            break;
+
+       default: i = 1;
+        }
+    }
+}
